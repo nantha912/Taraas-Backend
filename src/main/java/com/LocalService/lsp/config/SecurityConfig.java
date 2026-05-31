@@ -124,7 +124,8 @@ public class SecurityConfig {
                 "https://taraas.com",
                 "https://www.taraas.com",
                 "https://api.taraas.com",
-                "https://qa-api.taraas.com"
+                "https://qa-api.taraas.com",
+                "https://qa.taraas.com"
         ));
 
         // Explicitly define allowed methods
