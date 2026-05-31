@@ -59,6 +59,7 @@ public class SecurityConfig {
 
                 // 6. Set up authorization rules
                 .authorizeHttpRequests(auth -> auth
+
                         // Public endpoints - no authentication required
                         .requestMatchers("/api/auth/otp/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
@@ -122,7 +123,8 @@ public class SecurityConfig {
                 "http://127.0.0.1:5173",
                 "https://taraas.com",
                 "https://www.taraas.com",
-                "https://api.taraas.com"
+                "https://api.taraas.com",
+                "https://qa-api.taraas.com"
         ));
 
         // Explicitly define allowed methods
