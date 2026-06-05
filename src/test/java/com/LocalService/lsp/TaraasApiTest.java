@@ -73,6 +73,39 @@ public class TaraasApiTest extends BaseApiTest {
     @Order(1)
     @DisplayName("Customer: Register a new user for subsequent tests")
     public void test01_RegisterCustomer() {
+        // 1. Request OTP
+        Map<String, String> otpRequest = new HashMap<>();
+        otpRequest.put("email", testEmail);
+        given()
+                .spec(requestSpec)
+                .body(otpRequest)
+                .when()
+                .post("/api/auth/otp/send")
+                .then()
+                .statusCode(200);
+
+        // 2. Intercept and mock OTP in DB (bypass real email)
+        com.LocalService.lsp.model.OtpRecord otpRecord = otpRepository.findByEmail(testEmail)
+                .orElseThrow(() -> new RuntimeException("OTP record not found for " + testEmail));
+        
+        // We set a known OTP "123456" by hashing it and updating the DB record
+        otpRecord.setHashedOtp(passwordEncoder.encode("123456"));
+        otpRecord.setExpiryTime(java.time.LocalDateTime.now().plusMinutes(5));
+        otpRepository.save(otpRecord);
+
+        // 3. Verify OTP via API
+        Map<String, String> verifyRequest = new HashMap<>();
+        verifyRequest.put("email", testEmail);
+        verifyRequest.put("otp", "123456");
+        given()
+                .spec(requestSpec)
+                .body(verifyRequest)
+                .when()
+                .post("/api/auth/otp/verify")
+                .then()
+                .statusCode(200);
+
+        // 4. Register Customer
         Map<String, String> customer = new HashMap<>();
         customer.put("name", "Automation User");
         customer.put("email", testEmail);
@@ -479,6 +512,14 @@ public class TaraasApiTest extends BaseApiTest {
     @Order(21)
     @DisplayName("Customer Negative: Duplicate Registration")
     public void test21_CustomerRegistration_Duplicate() {
+        // Must verify OTP first to reach the registration logic
+        given().spec(requestSpec).body(Map.of("email", testEmail)).when().post("/api/auth/otp/send");
+        com.LocalService.lsp.model.OtpRecord otpRecord = otpRepository.findByEmail(testEmail).get();
+        otpRecord.setHashedOtp(passwordEncoder.encode("123456"));
+        otpRecord.setExpiryTime(java.time.LocalDateTime.now().plusMinutes(5));
+        otpRepository.save(otpRecord);
+        given().spec(requestSpec).body(Map.of("email", testEmail, "otp", "123456")).when().post("/api/auth/otp/verify");
+
         Map<String, String> duplicateCustomer = new HashMap<>();
         duplicateCustomer.put("name", "Duplicate User");
         duplicateCustomer.put("email", testEmail); // Using the same email from test01
