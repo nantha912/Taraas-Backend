@@ -81,7 +81,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/offers/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/offers/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/offers/**").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/*/profile-photo").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/customers/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/customers/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/providers/**").authenticated()
