@@ -12,12 +12,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import org.springframework.http.HttpMethod;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -30,9 +27,15 @@ import jakarta.servlet.http.HttpServletResponse;
 )
 public class SecurityConfig {
 
+    private final CardScraperFilter cardScraperFilter;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    public SecurityConfig(CardScraperFilter cardScraperFilter) {
+        this.cardScraperFilter = cardScraperFilter;
     }
 
     @Bean
@@ -41,8 +44,8 @@ public class SecurityConfig {
             JwtAuthenticationFilter jwtAuthenticationFilter,
             RateLimitingFilter rateLimitingFilter) throws Exception {
         http
-                // 1. Apply CORS configuration first in the chain
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // 1. Force Spring Security to use your centralized global dynamic WebMvcConfigurer settings
+                .cors(cors -> cors.configure(http))
 
                 // 2. Disable CSRF for stateless REST APIs to prevent 403 on POST/PUT
                 .csrf(AbstractHttpConfigurer::disable)
@@ -51,11 +54,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // 4. Add security headers for HTTPS/SSL (basic configuration)
-                .headers(headers -> headers.frameOptions().deny())
+                .headers(headers -> headers.frameOptions(frame -> frame.deny()))
 
                 // 5. Add JWT and rate limiting filters
                 .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(cardScraperFilter, AuthorizationFilter.class)
 
                 // 6. Set up authorization rules
                 .authorizeHttpRequests(auth -> auth
@@ -68,10 +72,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/customers/register").permitAll()
                         .requestMatchers("/api/customers/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/providers/search").permitAll()
+                        .requestMatchers("/provider/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/customers/customer/**").permitAll()
                         .requestMatchers("/api/customers/health").permitAll()
                         .requestMatchers("/api/customers/password/reset").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
 
                         // Admin endpoints - manual role check in controller
                         .requestMatchers("/api/admin/**").permitAll()
@@ -111,43 +117,5 @@ public class SecurityConfig {
                 );
 
         return http.build();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-
-        // Allowed Origins
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "https://taraas.com",
-                "https://www.taraas.com",
-                "https://api.taraas.com",
-                "https://qa-api.taraas.com",
-                "https://qa.taraas.com"
-        ));
-
-        // Explicitly define allowed methods
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-
-        // Headers to support Authorization and custom headers
-        configuration.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "Cache-Control",
-                "X-Requested-With",
-                "Accept",
-                "Origin",
-                "X-API-KEY"
-        ));
-
-        configuration.setAllowCredentials(true);
-
-        // Apply to ALL paths
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-
-        return source;
     }
 }

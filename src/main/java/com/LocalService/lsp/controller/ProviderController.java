@@ -30,7 +30,6 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/providers")
-@CrossOrigin(origins = "*")
 public class ProviderController {
 
     private static final Logger logger = LoggerFactory.getLogger(ProviderController.class);

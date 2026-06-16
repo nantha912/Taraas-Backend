@@ -1,4 +1,5 @@
 package com.LocalService.lsp.controller;
+
 import com.LocalService.lsp.model.Transaction;
 import com.LocalService.lsp.model.Customer;
 import com.LocalService.lsp.model.Provider;
@@ -8,6 +9,13 @@ import com.LocalService.lsp.repository.TransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +34,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
 @RequestMapping("/api/transactions")
-@CrossOrigin(origins = "*")
 public class TransactionController {
 
     private static final Logger logger = LoggerFactory.getLogger(TransactionController.class);
@@ -40,23 +47,18 @@ public class TransactionController {
     @Autowired
     private ProviderRepository providerRepository;
 
-    /**
-     * SSE Registry: Maps User IDs to lists of emitters.
-     * Thread-safe collection to support multiple concurrent sessions (multi-tab testing).
-     */
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
-    /**
-     * SSE Stream Endpoints
-     * These allow the React frontend (EventSource) to "subscribe" to transaction updates.
-     */
     @GetMapping(value = "/customer/{customerId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<?> streamToCustomer(@PathVariable String customerId) {
         if (customerId == null || customerId.isBlank()) {
             return ResponseEntity.badRequest().body("Customer ID is required");
         }
         logger.info("Stream req received from customer");
-        SseEmitter emitter = new SseEmitter(1800_000L); // 30-minute timeout
+        SseEmitter emitter = new SseEmitter(1800_000L); 
         addEmitter(customerId, emitter);
         emitter.onCompletion(() -> removeEmitter(customerId, emitter));
         emitter.onTimeout(() -> removeEmitter(customerId, emitter));
@@ -91,9 +93,6 @@ public class TransactionController {
         }
     }
 
-    /**
-     * Real-time Broadcast: Pushes the updated transaction object to the relevant parties.
-     */
     private void broadcast(Transaction tx) {
         if (tx == null) return;
         String providerId = tx.getProviderId();
@@ -107,7 +106,6 @@ public class TransactionController {
         if (userEmitters != null) {
             for (SseEmitter emitter : userEmitters) {
                 try {
-                    // event name "PAYMENT_UPDATE" must match frontend .addEventListener('PAYMENT_UPDATE')
                     emitter.send(SseEmitter.event().name("PAYMENT_UPDATE").data(tx));
                 } catch (IOException e) {
                     removeEmitter(id, emitter);
@@ -123,7 +121,6 @@ public class TransactionController {
         }
         logger.info("payment initiate request received");
 
-        // Manual validation
         Double amount = transaction.getAmount();
         if (amount == null || amount < 20.0) {
             return ResponseEntity.badRequest().body(Map.of("amount", "Amount must be at least 20"));
@@ -150,6 +147,10 @@ public class TransactionController {
         transaction.setCreatedAt(LocalDateTime.now());
         transaction.setBilled(false);
         Transaction saved = transactionRepository.save(transaction);
+        
+        // Atomically increments totalOrdersCount (+1)
+        updateProviderOrderCounters(saved.getProviderId(), "totalOrdersCount", 1);
+        
         broadcast(saved);
         return ResponseEntity.ok(saved);
     }
@@ -173,7 +174,7 @@ public class TransactionController {
             
             t.setStatus("CUSTOMER_CONFIRMED");
             Transaction saved = transactionRepository.save(t);
-            broadcast(saved); // Triggers Provider Alert
+            broadcast(saved); 
             return ResponseEntity.ok(saved);
         }).orElse(ResponseEntity.notFound().build());
     }
@@ -194,25 +195,32 @@ public class TransactionController {
         Customer currentCustomer = requesterOpt.get();
 
         return transactionRepository.findById(id).map(t -> {
-            // Logic Check: A customer cannot verify a transaction they initiated themselves
             if (currentCustomer.getId().equals(t.getCustomerId())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "As the initiator, you cannot verify your own payment. Only the provider can verify."));
             }
 
-            if (!currentCustomer.getId().equals(t.getProviderId())) { // Assuming providerId matches customerId of provider
-                // Wait, providerId is NOT customerId. I need to find the provider profile.
+            if (!currentCustomer.getId().equals(t.getProviderId())) { 
                 Optional<Provider> providerProfile = providerRepository.findByCustomerId(currentCustomer.getId());
                 if (providerProfile.isEmpty() || !providerProfile.get().getId().equals(t.getProviderId())) {
                     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Only the provider for this transaction can verify it."));
                 }
             }
             
+            String previousStatus = t.getStatus();
+            
             t.setStatus("COMPLETED");
             Transaction saved = transactionRepository.save(t);
-            broadcast(saved); // Triggers Customer Handshake/Review Popup
+            
+            // Increment completedOrdersCount (+1) only if transitioning to completed for the first time
+            if (!"COMPLETED".equalsIgnoreCase(previousStatus)) {
+                updateProviderOrderCounters(saved.getProviderId(), "completedOrdersCount", 1);
+            }
+            
+            broadcast(saved); 
             return ResponseEntity.ok(saved);
         }).orElse(ResponseEntity.notFound().build());
     }
+
     @PutMapping("/{id}/reject")
     public ResponseEntity<?> rejectTransaction(
             @PathVariable String id,
@@ -239,24 +247,28 @@ public class TransactionController {
 
             t.setStatus("REJECTED");
 
-            // Optional: store rejection reason (future-proof)
             if (payload != null && payload.containsKey("reason")) {
                 t.setRejectionReason(payload.get("reason"));
             }
 
             Transaction saved = transactionRepository.save(t);
-            broadcast(saved); // 🔔 notify customer in real-time
+            
+            // 👑 THE CRITICAL FRAUD PROTECTION SECURITY FIX:
+            // We NO LONGER update totalOrdersCount with a -1 penalty here.
+            // Leaving totalOrdersCount intact widens the gap against completedOrdersCount,
+            // dropping the provider's overall fulfillment velocity scores to flag off-platform cheating.
+            logger.info("Transaction rejected by provider: {}. Total orders count preserved for fraud tracking loop metrics.", saved.getProviderId());
+
+            broadcast(saved); 
             return ResponseEntity.ok(saved);
         }).orElse(ResponseEntity.notFound().build());
     }
-
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteTransaction(@PathVariable String id) {
         if (id == null || id.isBlank()) {
             return ResponseEntity.badRequest().body("Transaction ID is required");
         }
-        // Only Admins should delete transactions for audit trail
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Only administrators can delete transactions."));
@@ -264,24 +276,73 @@ public class TransactionController {
 
         logger.info("Deleting Transaction ID: {}", id);
         return transactionRepository.findById(id).map(transaction -> {
+            String previousStatus = transaction.getStatus();
+            String providerId = transaction.getProviderId();
+            
             transactionRepository.delete(transaction);
+            
+            // Admin manual ledger adjustments
+            if ("COMPLETED".equalsIgnoreCase(previousStatus)) {
+                updateProviderOrderCounters(providerId, "completedOrdersCount", -1);
+                updateProviderOrderCounters(providerId, "totalOrdersCount", -1);
+            } else {
+                updateProviderOrderCounters(providerId, "totalOrdersCount", -1);
+            }
+            
             return ResponseEntity.ok().build();
         }).orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/customer/{customerId}")
-    public ResponseEntity<?> getByCustomer(@PathVariable String customerId) {
-        if (customerId == null || customerId.isBlank()) {
-            return ResponseEntity.badRequest().body("Customer ID is required");
-        }
-        return ResponseEntity.ok(transactionRepository.findByCustomerId(customerId));
+    public ResponseEntity<?> getByCustomer(
+        @PathVariable String customerId,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size) {
+        
+    if (customerId == null || customerId.isBlank()) {
+        return ResponseEntity.badRequest().body("Customer ID is required");
+    }
+    
+    // Sort transactions by newest first so the user sees fresh history
+    Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+    
+    List<Transaction> records = transactionRepository.findByCustomerId(customerId, pageable);
+    return ResponseEntity.ok(records);
     }
 
     @GetMapping("/provider/{providerId}")
-    public ResponseEntity<?> getByProvider(@PathVariable String providerId) {
+    public ResponseEntity<?> getByProvider(
+            @PathVariable String providerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+            
         if (providerId == null || providerId.isBlank()) {
             return ResponseEntity.badRequest().body("Provider ID is required");
         }
-        return ResponseEntity.ok(transactionRepository.findByProviderId(providerId));
+        
+        logger.info("Fetching paginated transactions for providerId: {}, page: {}, size: {}", providerId, page, size);
+        
+        // 👑 HIGH-SCALE PRODUCTION FIX: Sort by newest first and apply data boundaries
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        List<Transaction> records = transactionRepository.findByProviderId(providerId, pageable);
+        return ResponseEntity.ok(records);
+    }
+
+    private void updateProviderOrderCounters(String providerId, String targetFieldName, int incrementalValue) {
+        if (providerId == null || providerId.isBlank() || targetFieldName == null) return;
+
+        try {
+            Query query = new Query(Criteria.where("_id").is(providerId));
+            Update updateOp = new Update().inc(targetFieldName, incrementalValue);
+            mongoTemplate.updateFirst(query, updateOp, "providers");
+            
+            logger.info("Atomic Incremental Order Sync -> Provider: {}, Field: {}, Adjustment: {}", 
+                    providerId, targetFieldName, incrementalValue);
+            
+        } catch (Exception e) {
+            logger.error("Failed executing incremental transaction calculation matrices for Provider {}: {}", 
+                    providerId, e.getMessage());
+        }
     }
 }

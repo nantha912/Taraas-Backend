@@ -8,7 +8,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth/otp")
-@CrossOrigin(origins = "*")
 public class OtpController {
 
     @Autowired private OtpService otpService;

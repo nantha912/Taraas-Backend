@@ -9,6 +9,10 @@ import com.LocalService.lsp.repository.ProviderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -23,7 +27,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/offers")
-@CrossOrigin(origins = "*")
 public class OfferController {
 
     private static final Logger logger = LoggerFactory.getLogger(OfferController.class);
@@ -133,7 +136,7 @@ public class OfferController {
 
         LocalDateTime now = LocalDateTime.now();
 
-        List<Offer> eligible = offerRepository.findByProviderIdAndIsActiveTrue(providerId)
+        List<Offer> eligible = offerRepository.findByProviderId(providerId)
                 .stream()
                 .filter(o -> o.getMinCategory() != null && category.getRank() >= o.getMinCategory().getRank())
                 .filter(o -> o.getStartDate() == null || o.getStartDate().isBefore(now))
@@ -147,46 +150,34 @@ public class OfferController {
      * Public: Fetch all active offers (View Offers page)
      * Supports optional category & location filters
      */
+    /**
+     * Public: Fetch all active offers (View Offers page)
+     * Supports optional partial relative category filtering
+     */
     @GetMapping("/active")
     public ResponseEntity<?> getActiveOffers(
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) String location
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        logger.info("Fetching simplified paginated regex offers -> Category: {}, Page: {}, Size: {}", category, page, size);
 
-        List<Offer> active = offerRepository.findByIsActiveTrue()
-                .stream()
+        // Sort by stable secondary IDs as established in our previous optimization step
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("id")));
 
-                // 🔹 Date validity
-                .filter(o -> o.getStartDate() == null || !o.getStartDate().isAfter(now))
-                .filter(o -> o.getEndDate() == null || !o.getEndDate().isBefore(now))
+        List<Offer> paginatedOffers;
 
-                // 🔹 Category filter (List<String>)
-                .filter(o -> {
-                    if (category == null || category.isBlank()) return true;
-                    if (o.getServiceCategory() == null) return false;
+        if (category == null || category.isBlank()) {
+            // If no category filter is applied, return a clean page frame of all records
+            Page<Offer> offerPage = offerRepository.findAll(pageable);
+            paginatedOffers = offerPage.getContent();
+        } else {
+            // Otherwise, execute the regex partial search lookups
+            Page<Offer> offerPage = offerRepository.findByServiceCategoryContainingRegex(category.trim(), pageable);
+            paginatedOffers = offerPage.getContent();
+        }
 
-                    return o.getServiceCategory()
-                            .stream()
-                            .anyMatch(c -> c != null && c.equalsIgnoreCase(category));
-                })
-
-                // 🔹 Location filter (string contains)
-                .filter(o -> {
-                    if (location == null || location.isBlank()) return true;
-                    if (o.getLocation() == null) return false;
-
-                    return o.getLocation()
-                            .toLowerCase()
-                            .contains(location.toLowerCase());
-                })
-
-                // 🔹 Featured offers first
-                .sorted((a, b) -> Boolean.compare(b.isFeatured(), a.isFeatured()))
-
-                .collect(Collectors.toList());
-        
-        return ResponseEntity.ok(active);
+        return ResponseEntity.ok(paginatedOffers);
     }
 
     /**

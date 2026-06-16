@@ -21,7 +21,6 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/payments")
-@CrossOrigin(origins = "*")
 public class PaymentController {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentController.class);
@@ -34,7 +33,6 @@ public class PaymentController {
 
     /**
      * STEP 1: Create Order
-     * Triggered when user clicks "Pay Now" on the Charges Page.
      */
     @PostMapping("/create-order")
     public ResponseEntity<?> createOrder(@RequestBody Map<String, Object> payload) {
@@ -47,16 +45,33 @@ public class PaymentController {
             if (amountObj == null) return ResponseEntity.badRequest().body("amount required");
 
             String statementId = statementIdObj.toString();
-            Double amount = Double.valueOf(amountObj.toString());
 
-            logger.info("Initiating payment order for Statement: {} Amount: ₹{}", statementId, amount);
+            Optional<Statement> stmtOpt = statementRepository.findById(statementId);
+            if (stmtOpt.isEmpty()) {
+                logger.warn("Order creation failed: Statement ID {} not found in database", statementId);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Statement record not found."));
+            }
 
-            String razorpayOrderId = paymentService.createRazorpayOrder(amount, statementId);
+            Statement stmt = stmtOpt.get();
+
+            if ("PAID".equals(stmt.getStatus())) {
+                return ResponseEntity.badRequest().body("This statement has already been paid.");
+            }
+
+            Double authenticAmount = stmt.getCommissionAmount();
+
+            logger.info("Initiating secure payment order for Statement: {} Amount: ₹{}", statementId, authenticAmount);
+
+            String razorpayOrderId = paymentService.createRazorpayOrder(authenticAmount, statementId);
+
+            // Precision Risk Fix: Math.round handles floating point issues cleanly when shifting to paise
+            long amountInPaise = Math.round(authenticAmount * 100);
 
             Map<String, Object> response = new HashMap<>();
             response.put("razorpayOrderId", razorpayOrderId);
             response.put("razorpayKeyId", paymentService.getKeyId());
-            response.put("amount", Math.round(amount * 100)); // Returns paise to frontend
+            response.put("amount", amountInPaise); 
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -68,7 +83,7 @@ public class PaymentController {
 
     /**
      * STEP 2: Verify Payment
-     * Triggered by Razorpay Handler callback on successful payment.
+     * Hardened: Captures razorpay_payment_id and records an audit trail in MongoDB.
      */
     @PostMapping("/verify")
     public ResponseEntity<?> verifyPayment(@RequestBody Map<String, String> payload) {
@@ -83,15 +98,20 @@ public class PaymentController {
         boolean isValid = paymentService.verifySignature(payload);
 
         if (isValid) {
-            // 2. Update the statement status in MongoDB
+            // 2. Update the statement status and log audit fields in MongoDB
             Optional<Statement> stmtOpt = statementRepository.findById(statementId);
             if (stmtOpt.isPresent()) {
                 Statement stmt = stmtOpt.get();
+                
+                // --- AUDIT TRAIL ENHANCEMENT ---
+                String razorpayPaymentId = payload.get("razorpay_payment_id");
+                stmt.setRazorpayPaymentId(razorpayPaymentId); 
+                
                 stmt.setStatus("PAID");
                 stmt.setPaidAt(LocalDateTime.now());
                 statementRepository.save(stmt);
 
-                logger.info("Payment verified and statement updated: {}", statementId);
+                logger.info("Payment verified. Statement {} marked PAID with Transaction ID: {}", statementId, razorpayPaymentId);
                 return ResponseEntity.ok(Map.of("status", "success"));
             } else {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -103,4 +123,86 @@ public class PaymentController {
                     .body(Map.of("status", "failed", "message", "Invalid payment signature."));
         }
     }
+
+        /**
+    * STEP 3: Razorpay Webhook Gateway
+    * Asynchronously processes automated payment.captured alerts directly from Razorpay's servers.
+    */
+    @PostMapping("/webhook")
+    public ResponseEntity<Void> handleRazorpayWebhook(
+           @RequestBody String rawPayload,
+           @RequestHeader("X-Razorpay-Signature") String signature) {
+    
+        if (rawPayload == null || signature == null || signature.isBlank()) {
+            logger.warn("Webhook dropped: Missing signature header or raw payload body structure.");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+
+        // 1. Verify that this event actually came from Razorpay's secure servers
+        boolean isGenuine = paymentService.verifyWebhookSignature(rawPayload, signature);
+        if (!isGenuine) {
+            logger.warn("Security Alert: Unauthorized or malicious Webhook attempt rejected!");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            // 2. Map the raw payload text to a JSON object wrapper
+            org.json.JSONObject webhookData = new org.json.JSONObject(rawPayload);
+            String eventType = webhookData.optString("event");
+
+            // We only care about successfully captured transactions
+            if ("payment.captured".equals(eventType)) {
+                org.json.JSONObject paymentEntity = webhookData
+                        .getJSONObject("payload")
+                        .getJSONObject("payment")
+                        .getJSONObject("entity");
+
+                // Extract the original Razorpay Order ID generated in STEP 1
+                String razorpayOrderId = paymentEntity.optString("order_id");
+                String razorpayPaymentId = paymentEntity.optString("id");
+
+                logger.info("Webhook processing payment.captured event for Order: {} (Payment ID: {})", 
+                        razorpayOrderId, razorpayPaymentId);
+
+                // 3. Find the target record in MongoDB by checking the order mapping
+                // Note: Since receipt parameter tracks statement configurations, we can fetch via notes or repositories
+                Optional<Statement> stmtOpt = statementRepository.findAll().stream()
+                        .filter(s -> "PAID".equals(s.getStatus()) == false) // Performance opt: filter open targets
+                        .filter(s -> {
+                            // Locate the record whose receipt or tracking matches your statement sequence
+                            return ("stmt_" + s.getId()).equals(paymentEntity.optString("receipt"));
+                        })
+                        .findFirst();
+
+                if (stmtOpt.isPresent()) {
+                    Statement stmt = stmtOpt.get();
+                    
+                    // Idempotency check: If the user's browser already cleared this bill via STEP 2, exit cleanly
+                    if ("PAID".equals(stmt.getStatus())) {
+                        logger.info("Webhook execution skipped: Statement {} already settled via browser workflow.", stmt.getId());
+                        return ResponseEntity.ok().build();
+                    }
+
+                    // Update database state variables safely
+                    stmt.setStatus("PAID");
+                    stmt.setPaidAt(LocalDateTime.now());
+                    stmt.setRazorpayPaymentId(razorpayPaymentId);
+                    statementRepository.save(stmt);
+
+                    logger.info("Webhook successfully processed! Statement {} updated to PAID asynchronously.", stmt.getId());
+                } else {
+                    logger.warn("Webhook Warning: Payment captured but no matching un-settled statement sequence located.");
+                }
+            }
+
+            // Always return a clean 200 OK to Razorpay quickly so their service stops retrying the alert queue
+            return ResponseEntity.ok().build();
+
+        } catch (Exception e) {
+            logger.error("Critical failure during Webhook parsing matrix: ", e);
+            // Return 500 error if execution fails so Razorpay adds the event back into their processing pool retry schedule
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
 }
