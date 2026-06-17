@@ -13,7 +13,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin/commission")
-@CrossOrigin(origins = "*")
 public class AdminCommissionController {
 
     @Autowired private StatementService statementService;

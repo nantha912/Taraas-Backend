@@ -74,4 +74,23 @@ public class PaymentService {
     public String getKeyId() {
         return keyId;
     }
+
+    @Value("${razorpay.webhook-secret}")
+    private String webhookSecret;
+
+/**
+ * Validates that the incoming Webhook call genuinely originated from Razorpay's servers.
+ * Razorpay passes the verification signature package in the X-Razorpay-Signature header.
+ */
+    public boolean verifyWebhookSignature(String payload, String signature) {
+        try {
+            // The SDK requires the raw text request body string, the signature header, and your webhook secret
+            return Utils.verifyWebhookSignature(payload, signature, webhookSecret);
+        } catch (RazorpayException e) {
+            logger.error("Webhook cryptographic validation crashed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+
 }

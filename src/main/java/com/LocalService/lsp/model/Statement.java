@@ -22,6 +22,7 @@ public class Statement {
     private LocalDateTime generatedAt;
     private String generatedBy;       // "SYSTEM" or "ADMIN"
     private LocalDateTime paidAt;
+    private String razorpay_payment_id;
 
     public Statement() {}
 
@@ -54,4 +55,11 @@ public class Statement {
     public String getBillingYear() {return billingYear;}
 
     public void setBillingYear(String billingYear) {this.billingYear = billingYear;}
+
+    public String getRazorpayPaymentId() {
+    return razorpay_payment_id;
+}
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpay_payment_id = razorpayPaymentId;
+    }
 }

@@ -4,6 +4,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.GeoSpatialIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 /**
@@ -27,7 +28,7 @@ private String city;
 private String serviceDeliveryType;
 
     @GeoSpatialIndexed(type = org.springframework.data.mongodb.core.index.GeoSpatialIndexType.GEO_2DSPHERE)
-    private double[] coordinates; // [longitude, latitude]
+    private Double[] coordinates; // [longitude, latitude]
 
     private String upiId;
     private String profilePhotoUrl;
@@ -38,6 +39,111 @@ private String serviceDeliveryType;
     private String youtubeLink;
     private String twitterLink;
     private String websiteLink;
+
+    //onboard tracker variables
+    private String role;
+    private String subscriptionStatus;
+    private double subscriptionPaidAmount;
+    private LocalDateTime lastPaymentDate;
+    private LocalDateTime nextRenewalDate;
+    private String razorpayPaymentId;
+
+    private String generatedCardImageUrl;
+
+    private int reviewCount = 0;
+    private double averageRating = 0.0;
+    private int completedOrdersCount = 0;
+    private int totalOrdersCount = 0;
+
+    public int getReviewCount() {
+        return reviewCount;
+    }
+
+    public void setReviewCount(int reviewCount) {
+        this.reviewCount = reviewCount;
+    }
+
+    public double getAverageRating() {
+        return averageRating;
+    }
+
+    public void setAverageRating(double averageRating) {
+        this.averageRating = averageRating;
+    }
+
+    public int getCompletedOrdersCount() {
+        return completedOrdersCount;
+    }
+
+    public void setCompletedOrdersCount(int completedOrdersCount) {
+        this.completedOrdersCount = completedOrdersCount;
+    }
+
+    public int getTotalOrdersCount() {
+        return totalOrdersCount;
+    }
+
+    public void setTotalOrdersCount(int totalOrdersCount) {
+        this.totalOrdersCount = totalOrdersCount;
+    }
+
+    public String getGeneratedCardImageUrl() {
+        return generatedCardImageUrl;
+    }
+
+    public void setGeneratedCardImageUrl(String generatedCardImageUrl) {
+        this.generatedCardImageUrl = generatedCardImageUrl;
+    }
+
+
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public String getSubscriptionStatus() {
+        return subscriptionStatus;
+    }
+
+    public void setSubscriptionStatus(String subscriptionStatus) {
+        this.subscriptionStatus = subscriptionStatus;
+    }
+
+    public double getSubscriptionPaidAmount() {
+        return subscriptionPaidAmount;
+    }
+
+    public void setSubscriptionPaidAmount(double subscriptionPaidAmount) {
+        this.subscriptionPaidAmount = subscriptionPaidAmount;
+    }
+
+    public LocalDateTime getLastPaymentDate() {
+        return lastPaymentDate;
+    }
+
+    public void setLastPaymentDate(LocalDateTime lastPaymentDate) {
+        this.lastPaymentDate = lastPaymentDate;
+    }
+
+    public LocalDateTime getNextRenewalDate() {
+        return nextRenewalDate;
+    }
+
+    public void setNextRenewalDate(LocalDateTime nextRenewalDate) {
+        this.nextRenewalDate = nextRenewalDate;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
+    }
 
     public Provider() {}
 
@@ -68,8 +174,8 @@ private String serviceDeliveryType;
     public void setLocation(String location) { this.location = location; }
     public String getCity() { return city; }
     public void setCity(String city) { this.city = city; }
-    public double[] getCoordinates() { return coordinates; }
-    public void setCoordinates(double[] coordinates) { this.coordinates = coordinates; }
+    public Double[] getCoordinates() { return coordinates; }
+    public void setCoordinates(Double[] coordinates) { this.coordinates = coordinates; }
     public String getUpiId() { return upiId; }
     public void setUpiId(String upiId) { this.upiId = upiId; }
     public String getProfilePhotoUrl() { return profilePhotoUrl; }

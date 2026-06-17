@@ -34,17 +34,26 @@ public class OtpService {
         }
         Optional<OtpRecord> existing = otpRepository.findByEmail(email);
 
+        // 👑 THE DEFINITIVE FIX: Instantiate a single object reference immediately
+        OtpRecord record = existing.orElse(new OtpRecord());
+
+        // Now run your checks directly on the active record instance
         if (existing.isPresent()) {
-            OtpRecord record = existing.get();
             LocalDateTime lastSent = record.getLastSentAt();
+
+            // Reset counter if it's a new day OR if the timestamp is missing
+            if (lastSent == null || !lastSent.toLocalDate().isEqual(LocalDateTime.now().toLocalDate())) {
+                record.setDailyCount(0); // This directly updates the object we will save!
+            }
+
             // Check Rate Limit: 60 seconds
             if (lastSent != null &&
                     ChronoUnit.SECONDS.between(lastSent, LocalDateTime.now()) < 60) {
                 throw new IllegalStateException("Please wait 60 seconds before requesting a new OTP.");
             }
+            
             // Check Daily Limit: 10
-            if (record.getDailyCount() >= 10 && lastSent != null &&
-                    lastSent.toLocalDate().isEqual(LocalDateTime.now().toLocalDate())) {
+            if (record.getDailyCount() >= 10) {
                 throw new IllegalStateException("Daily OTP limit reached. Try again tomorrow.");
             }
         }
@@ -52,14 +61,14 @@ public class OtpService {
         String otp = String.format("%06d", secureRandom.nextInt(999999));
         String hashedOtp = passwordEncoder.encode(otp);
 
-        OtpRecord record = existing.orElse(new OtpRecord());
+        // 👑 CLEANUP: Remove old Line 53 ("OtpRecord record = existing.orElse(...)")
         record.setEmail(email);
         record.setHashedOtp(hashedOtp);
         record.setExpiryTime(LocalDateTime.now().plusMinutes(5));
         record.setAttemptCount(0);
         record.setLastSentAt(LocalDateTime.now());
         record.setVerified(false);
-        record.setDailyCount(record.getDailyCount() + 1);
+        record.setDailyCount(record.getDailyCount() + 1); // Continues from 0 + 1 = 1!
 
         otpRepository.save(record);
 

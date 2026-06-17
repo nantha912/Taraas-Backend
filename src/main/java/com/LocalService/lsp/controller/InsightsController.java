@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/insights")
-@CrossOrigin(origins = "*")
 public class InsightsController {
 
     private static final Logger logger = LoggerFactory.getLogger(InsightsController.class);

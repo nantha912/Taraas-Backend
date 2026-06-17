@@ -1,6 +1,8 @@
 package com.LocalService.lsp.repository;
 
 import com.LocalService.lsp.model.Transaction;
+
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +17,9 @@ import java.util.List;
 @Repository
 public interface TransactionRepository extends MongoRepository<Transaction, String> {
 
+        
+        List<Transaction> findByCustomerId(String customerId, Pageable pageable);
+        List<Transaction> findByProviderId(String providerId, Pageable pageable);
     /**
      * Find all transactions associated with a provider.
      */
