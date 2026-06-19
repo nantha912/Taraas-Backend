@@ -160,7 +160,7 @@ public class OfferController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        logger.info("Fetching simplified paginated regex offers -> Category: {}, Page: {}, Size: {}", category, page, size);
+        //logger.info("Fetching simplified paginated regex offers -> Category: {}, Page: {}, Size: {}", category, page, size);
 
         // Sort by stable secondary IDs as established in our previous optimization step
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("id")));
@@ -227,7 +227,7 @@ public class OfferController {
             }
 
             offerRepository.deleteById(id);
-            logger.info("Offer {} deleted by provider {}", id, provider.getId());
+            //logger.info("Offer {} deleted by provider {}", id, provider.getId());
             return ResponseEntity.ok().build();
         } catch (Exception ex) {
             logger.error("Error deleting offer {}", id, ex);

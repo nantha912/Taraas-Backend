@@ -61,7 +61,7 @@ public class PaymentController {
 
             Double authenticAmount = stmt.getCommissionAmount();
 
-            logger.info("Initiating secure payment order for Statement: {} Amount: ₹{}", statementId, authenticAmount);
+            //logger.info("Initiating secure payment order for Statement: {} Amount: ₹{}", statementId, authenticAmount);
 
             String razorpayOrderId = paymentService.createRazorpayOrder(authenticAmount, statementId);
 
@@ -111,7 +111,7 @@ public class PaymentController {
                 stmt.setPaidAt(LocalDateTime.now());
                 statementRepository.save(stmt);
 
-                logger.info("Payment verified. Statement {} marked PAID with Transaction ID: {}", statementId, razorpayPaymentId);
+                //logger.info("Payment verified. Statement {} marked PAID with Transaction ID: {}", statementId, razorpayPaymentId);
                 return ResponseEntity.ok(Map.of("status", "success"));
             } else {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -161,8 +161,8 @@ public class PaymentController {
                 String razorpayOrderId = paymentEntity.optString("order_id");
                 String razorpayPaymentId = paymentEntity.optString("id");
 
-                logger.info("Webhook processing payment.captured event for Order: {} (Payment ID: {})", 
-                        razorpayOrderId, razorpayPaymentId);
+                //logger.info("Webhook processing payment.captured event for Order: {} (Payment ID: {})", 
+                //        razorpayOrderId, razorpayPaymentId);
 
                 // 3. Find the target record in MongoDB by checking the order mapping
                 // Note: Since receipt parameter tracks statement configurations, we can fetch via notes or repositories
@@ -179,7 +179,7 @@ public class PaymentController {
                     
                     // Idempotency check: If the user's browser already cleared this bill via STEP 2, exit cleanly
                     if ("PAID".equals(stmt.getStatus())) {
-                        logger.info("Webhook execution skipped: Statement {} already settled via browser workflow.", stmt.getId());
+                        //logger.info("Webhook execution skipped: Statement {} already settled via browser workflow.", stmt.getId());
                         return ResponseEntity.ok().build();
                     }
 
@@ -189,7 +189,7 @@ public class PaymentController {
                     stmt.setRazorpayPaymentId(razorpayPaymentId);
                     statementRepository.save(stmt);
 
-                    logger.info("Webhook successfully processed! Statement {} updated to PAID asynchronously.", stmt.getId());
+                    //logger.info("Webhook successfully processed! Statement {} updated to PAID asynchronously.", stmt.getId());
                 } else {
                     logger.warn("Webhook Warning: Payment captured but no matching un-settled statement sequence located.");
                 }

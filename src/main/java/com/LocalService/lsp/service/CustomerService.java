@@ -41,7 +41,7 @@ public class CustomerService {
      */
     public Optional<Customer> getCustomerById(String id) {
         if (id == null) return Optional.empty();
-        logger.info("Service: Fetching customer by ID: {}", id);
+        //logger.info("Service: Fetching customer by ID: {}", id);
 
         Optional<Customer> customerOpt = customerRepository.findById(id);
         customerOpt.ifPresent(this::attachBuyerCategory);
@@ -64,7 +64,7 @@ public class CustomerService {
         if (customer == null || customer.getEmail() == null) {
             throw new IllegalArgumentException("Customer and email are required");
         }
-        logger.info("Attempting to register customer with email: {}", customer.getEmail());
+        //logger.info("Attempting to register customer with email: {}", customer.getEmail());
 
         if (customerRepository.existsByEmail(customer.getEmail())) {
             logger.warn("Registration failed: Email {} is already in use.", customer.getEmail());
@@ -80,7 +80,7 @@ public class CustomerService {
         customer.setBuyerCategory(Customer.BuyerCategory.NOT_VERIFIED);
 
         Customer savedCustomer = customerRepository.save(customer);
-        logger.info("Customer registered successfully with ID: {}", savedCustomer.getId());
+        //logger.info("Customer registered successfully with ID: {}", savedCustomer.getId());
 
         return savedCustomer;
     }
@@ -95,7 +95,7 @@ public class CustomerService {
             throw new IllegalArgumentException("Email and password are required");
         }
 
-        logger.info("Attempting to login customer with email: {}", email);
+        //logger.info("Attempting to login customer with email: {}", email);
 
         Customer customer = customerRepository.findByEmail(email)
                 .orElseThrow(() -> {
@@ -111,7 +111,7 @@ public class CustomerService {
         // 🔥 Compute tier on login
         attachBuyerCategory(customer);
 
-        logger.info("Customer logged in successfully: {}", email);
+        //logger.info("Customer logged in successfully: {}", email);
         return customer;
     }
 
@@ -141,12 +141,12 @@ public class CustomerService {
 
         customerRepository.save(customer);
 
-        logger.info(
-                "Computed buyer category for customer {} → {} (₹{})",
-                customer.getId(),
-                category,
-                totalSpent
-        );
+        //logger.info(
+        //        "Computed buyer category for customer {} → {} (₹{})",
+        //        customer.getId(),
+        //        category,
+        //        totalSpent
+        //);
     }
 
     private double calculateTotalSpent(String customerId) {
@@ -178,6 +178,6 @@ public class CustomerService {
         customer.setPassword(encodedPassword);
         customerRepository.save(customer);
 
-        logger.info("Password successfully reset for email: {}", email);
+        //logger.info("Password successfully reset for email: {}", email);
     }
 }

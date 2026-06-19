@@ -56,7 +56,7 @@ public class ReviewController {
             return ResponseEntity.badRequest().body("Provider ID is required");
         }
         
-        logger.info("Fetching paginated reviews for providerId: {}, page: {}, size: {}", providerId, page, size);
+        //logger.info("Fetching paginated reviews for providerId: {}, page: {}, size: {}", providerId, page, size);
         
         // 👑 Sort by newest reviews first
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -79,7 +79,7 @@ public class ReviewController {
             return ResponseEntity.badRequest().body("Customer ID is required");
         }
         
-        logger.info("Fetching paginated reviews for customerId: {}, page: {}, size: {}", customerId, page, size);
+        //logger.info("Fetching paginated reviews for customerId: {}, page: {}, size: {}", customerId, page, size);
         
         // 👑 Sort by newest reviews first
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -140,7 +140,7 @@ public class ReviewController {
             review.setCreatedAt(LocalDateTime.now());
         }
         Review savedReview = reviewRepository.save(review);
-        logger.info("Review saved successfully. ID: {}", savedReview.getId());
+        //logger.info("Review saved successfully. ID: {}", savedReview.getId());
         
         // 👑 O(1) INCREMENT METRICS
         updateProviderMetrics(savedReview.getProviderId(), savedReview.getRating(), null, "ADD");
@@ -232,7 +232,7 @@ public class ReviewController {
         
         Customer currentCustomer = customerOpt.get();
 
-        logger.info("Deleting Review ID: {}", id);
+        //logger.info("Deleting Review ID: {}", id);
         return reviewRepository.findById(id).map(review -> {
             if (!review.getCustomerId().equals(currentCustomer.getId())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "You can only delete your own reviews."));
@@ -340,8 +340,8 @@ public class ReviewController {
 
             mongoTemplate.updateFirst(providerQuery, updateOp, "providers");
             
-            logger.info("Incremental Production Engine Metric Sync -> ID: {}, Action: {}, New Count: {}, New Avg: {}", 
-                    providerId, action, nextCount, nextAvg);
+            //logger.info("Incremental Production Engine Metric Sync -> ID: {}, Action: {}, New Count: {}, New Avg: {}", 
+            //        providerId, action, nextCount, nextAvg);
 
         } catch (Exception e) {
             logger.error("Failed to run incremental score allocation for Provider ID {}: {}", providerId, e.getMessage());

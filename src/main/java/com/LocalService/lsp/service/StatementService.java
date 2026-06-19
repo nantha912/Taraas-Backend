@@ -43,7 +43,7 @@ public class StatementService {
             logger.error("billingMonth is null, cannot calculate statements.");
             return;
         }
-        logger.info("Starting Commission Calculation for {} by {}", billingMonth, triggeredBy);
+        //logger.info("Starting Commission Calculation for {} by {}", billingMonth, triggeredBy);
 
         YearMonth ym = YearMonth.parse(billingMonth);
         LocalDateTime start = ym.atDay(1).atStartOfDay();
@@ -108,6 +108,6 @@ public class StatementService {
                 failureCount++;
             }
         }
-        logger.info("Calculation Finished. Success: {}, Failures: {}", successCount, failureCount);
+        //logger.info("Calculation Finished. Success: {}, Failures: {}", successCount, failureCount);
     }
 }

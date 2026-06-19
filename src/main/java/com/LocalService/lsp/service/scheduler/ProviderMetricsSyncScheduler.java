@@ -32,7 +32,7 @@ public class ProviderMetricsSyncScheduler {
      */
     @Scheduled(cron = "0 0 2 * * *")
     public void runNightlyReconciliation() {
-        logger.info("Executing scheduled 2:00 AM Provider Metrics reconciliation sync script...");
+        //logger.info("Executing scheduled 2:00 AM Provider Metrics reconciliation sync script...");
         reconcileAllProviderMetrics();
     }
 
@@ -42,7 +42,7 @@ public class ProviderMetricsSyncScheduler {
      * to initialize your empty provider tracking counter parameters right now.
      */
     public int triggerManualMigration() {
-        logger.info("MANUAL TRIGGER: Initializing historical provider data calculations matrix...");
+        //logger.info("MANUAL TRIGGER: Initializing historical provider data calculations matrix...");
         return reconcileAllProviderMetrics();
     }
 
@@ -59,7 +59,7 @@ public class ProviderMetricsSyncScheduler {
             queryAllIds.fields().include("_id");
             List<Document> providers = mongoTemplate.find(queryAllIds, Document.class, "providers");
 
-            logger.info("Found {} provider records to reconcile.", providers.size());
+            //logger.info("Found {} provider records to reconcile.", providers.size());
 
             for (Document doc : providers) {
                 String providerId = doc.getObjectId("_id").toString();
@@ -115,7 +115,7 @@ public class ProviderMetricsSyncScheduler {
                 processedCount++;
             }
 
-            logger.info("Successfully reconciled and sync-locked metrics for {} providers.", processedCount);
+            //logger.info("Successfully reconciled and sync-locked metrics for {} providers.", processedCount);
 
         } catch (Exception e) {
             logger.error("CRITICAL CRON ERROR: Reconciliation execution matrix aborted: {}", e.getMessage());

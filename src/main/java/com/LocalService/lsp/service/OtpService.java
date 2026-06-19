@@ -73,7 +73,7 @@ public class OtpService {
         otpRepository.save(record);
 
         sendEmail(email, otp);
-        logger.info("OTP generated and sent to: {}", email);
+        //logger.info("OTP generated and sent to: {}", email);
     }
 
     private void sendEmail(String to, String otp) {

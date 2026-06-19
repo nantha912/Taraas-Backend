@@ -33,7 +33,6 @@ public class S3Config {
 
     @PostConstruct
     public void diagnosticCheck() {
-        logger.info("======= S3 CREDENTIAL RESOLUTION CHECK =======");
 
         // Check which specific key was found in the environment
         String resolvedAccessKeyName = "NONE";
@@ -42,22 +41,20 @@ public class S3Config {
         else if (env.containsProperty("AWS_ACCESS_KEY")) resolvedAccessKeyName = "AWS_ACCESS_KEY";
 
         if (accessKey != null && !accessKey.isBlank()) {
-            logger.info("Access Key Status: LOADED");
-            logger.info("Resolved From Source: {}", resolvedAccessKeyName);
-            logger.info("Key Length: {}", accessKey.length());
+            
         } else {
             logger.error("Access Key Status: NOT FOUND (Empty or Null)");
         }
 
         if (secretKey != null && !secretKey.isBlank()) {
-            logger.info("Secret Key Status: LOADED");
-            logger.info("Secret Key Length: {}", secretKey.length());
+           // //logger.info("Secret Key Status: LOADED");
+           // //logger.info("Secret Key Length: {}", secretKey.length());
         } else {
             logger.error("Secret Key Status: NOT FOUND");
         }
 
-        logger.info("Region: {}", region);
-        logger.info("===============================================");
+       // //logger.info("Region: {}", region);
+       // //logger.info("===============================================");
     }
 
     @Bean
