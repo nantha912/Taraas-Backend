@@ -79,9 +79,9 @@ public class CardScraperFilter extends OncePerRequestFilter {
         String cardUrl = provider.getGeneratedCardImageUrl();
         // 🟢 DEFENSE: Auto-prepend host domain if the database record holds a relative path string chunk
         if (cardUrl == null || cardUrl.isBlank()) {
-            cardUrl = "https://qa.taraas.com/logo_icon/android-chrome-512x512.png";
+            cardUrl = "https://taraas.com/logo_icon/android-chrome-512x512.png";
         } else if (!cardUrl.startsWith("http")) {
-            cardUrl = "https://qa.taraas.com" + cardUrl;
+            cardUrl = "https://taraas.com" + cardUrl;
         }
         
         generateHtmlPayload(out, provider.getName(), cardUrl, request.getRequestURL().toString());
@@ -90,7 +90,7 @@ public class CardScraperFilter extends OncePerRequestFilter {
     private void serveMockScraperResponse(HttpServletRequest request, HttpServletResponse response, String mockName) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        generateHtmlPayload(out, mockName, "https://qa.taraas.com/logo_icon/android-chrome-512x512.png", request.getRequestURL().toString());
+        generateHtmlPayload(out, mockName, "https://taraas.com/logo_icon/android-chrome-512x512.png", request.getRequestURL().toString());
     }
 
     private void generateHtmlPayload(PrintWriter out, String name, String cardUrl, String requestUrl) {
