@@ -57,7 +57,7 @@ public class TransactionController {
         if (customerId == null || customerId.isBlank()) {
             return ResponseEntity.badRequest().body("Customer ID is required");
         }
-        logger.info("Stream req received from customer");
+        //logger.info("Stream req received from customer");
         SseEmitter emitter = new SseEmitter(1800_000L); 
         addEmitter(customerId, emitter);
         emitter.onCompletion(() -> removeEmitter(customerId, emitter));
@@ -70,7 +70,7 @@ public class TransactionController {
         if (providerId == null || providerId.isBlank()) {
             return ResponseEntity.badRequest().body("Provider ID is required");
         }
-        logger.info("Stream req received from provider");
+        //logger.info("Stream req received from provider");
         SseEmitter emitter = new SseEmitter(1800_000L);
         addEmitter(providerId, emitter);
         emitter.onCompletion(() -> removeEmitter(providerId, emitter));
@@ -81,7 +81,7 @@ public class TransactionController {
     private void addEmitter(String id, SseEmitter emitter) {
         if (id == null) return;
         emitters.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>()).add(emitter);
-        logger.info("SSE Session opened for: {}. Total Active: {}", id, emitters.get(id).size());
+        //logger.info("SSE Session opened for: {}. Total Active: {}", id, emitters.get(id).size());
     }
 
     private void removeEmitter(String id, SseEmitter emitter) {
@@ -119,7 +119,7 @@ public class TransactionController {
         if (transaction == null) {
             return ResponseEntity.badRequest().body("Transaction data is required");
         }
-        logger.info("payment initiate request received");
+        //logger.info("payment initiate request received");
 
         Double amount = transaction.getAmount();
         if (amount == null || amount < 20.0) {
@@ -257,7 +257,7 @@ public class TransactionController {
             // We NO LONGER update totalOrdersCount with a -1 penalty here.
             // Leaving totalOrdersCount intact widens the gap against completedOrdersCount,
             // dropping the provider's overall fulfillment velocity scores to flag off-platform cheating.
-            logger.info("Transaction rejected by provider: {}. Total orders count preserved for fraud tracking loop metrics.", saved.getProviderId());
+            //logger.info("Transaction rejected by provider: {}. Total orders count preserved for fraud tracking loop metrics.", saved.getProviderId());
 
             broadcast(saved); 
             return ResponseEntity.ok(saved);
@@ -274,7 +274,7 @@ public class TransactionController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Only administrators can delete transactions."));
         }
 
-        logger.info("Deleting Transaction ID: {}", id);
+        //logger.info("Deleting Transaction ID: {}", id);
         return transactionRepository.findById(id).map(transaction -> {
             String previousStatus = transaction.getStatus();
             String providerId = transaction.getProviderId();
@@ -320,7 +320,7 @@ public class TransactionController {
             return ResponseEntity.badRequest().body("Provider ID is required");
         }
         
-        logger.info("Fetching paginated transactions for providerId: {}, page: {}, size: {}", providerId, page, size);
+        //logger.info("Fetching paginated transactions for providerId: {}, page: {}, size: {}", providerId, page, size);
         
         // 👑 HIGH-SCALE PRODUCTION FIX: Sort by newest first and apply data boundaries
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -337,8 +337,8 @@ public class TransactionController {
             Update updateOp = new Update().inc(targetFieldName, incrementalValue);
             mongoTemplate.updateFirst(query, updateOp, "providers");
             
-            logger.info("Atomic Incremental Order Sync -> Provider: {}, Field: {}, Adjustment: {}", 
-                    providerId, targetFieldName, incrementalValue);
+            //logger.info("Atomic Incremental Order Sync -> Provider: {}, Field: {}, Adjustment: {}", 
+            //        providerId, targetFieldName, incrementalValue);
             
         } catch (Exception e) {
             logger.error("Failed executing incremental transaction calculation matrices for Provider {}: {}", 

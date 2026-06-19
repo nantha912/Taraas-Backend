@@ -27,7 +27,10 @@ public class CardScraperFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
-        // 👑 FIX 1: Clean normalized check structure to catch any variant of the path safely
+        // 🟢 DEFENSE: Restrict strictly to base profile views. Ignore API traffic, assets, and management routes
+        if (path.contains("/api/") || path.contains(".") || path.contains("/offers") || path.contains("Onboard")) {
+            return true;
+        }
         return !path.contains("/provider/");
     }
 
@@ -39,10 +42,18 @@ public class CardScraperFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         if (userAgent != null && isSocialScraper(userAgent)) {
-            // 👑 FIX 2: Bulletproof string parsing extraction instead of flaky RegEx patterns
             String[] pathParts = path.split("/provider/");
             if (pathParts.length > 1) {
-                String providerId = pathParts[1].split("/")[0].trim(); // Extracts id accurately, ignoring trailing parameters
+                String segment = pathParts[1];
+                // Handle trailing slashes or sub-paths safely
+                String providerId = segment.contains("/") ? segment.split("/")[0] : segment;
+                providerId = providerId.trim();
+
+                // Stop empty parsing boundaries from executing queries
+                if (providerId.isBlank()) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 // Mock execution bypass rule for testing environments
                 if ("test-id-123".equals(providerId)) {
@@ -52,8 +63,7 @@ public class CardScraperFilter extends OncePerRequestFilter {
 
                 Optional<Provider> providerOpt = providerRepository.findById(providerId);
                 if (providerOpt.isPresent()) {
-                    Provider provider = providerOpt.get();
-                    serveScraperHtml(request, response, provider);
+                    serveScraperHtml(request, response, providerOpt.get());
                     return; 
                 }
             }
@@ -65,8 +75,14 @@ public class CardScraperFilter extends OncePerRequestFilter {
     private void serveScraperHtml(HttpServletRequest request, HttpServletResponse response, Provider provider) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        String cardUrl = provider.getGeneratedCardImageUrl() != null ? 
-                         provider.getGeneratedCardImageUrl() : "https://taraas.com/default-gold-card.png";
+        
+        String cardUrl = provider.getGeneratedCardImageUrl();
+        // 🟢 DEFENSE: Auto-prepend host domain if the database record holds a relative path string chunk
+        if (cardUrl == null || cardUrl.isBlank()) {
+            cardUrl = "https://qa.taraas.com/logo_icon/android-chrome-512x512.png";
+        } else if (!cardUrl.startsWith("http")) {
+            cardUrl = "https://qa.taraas.com" + cardUrl;
+        }
         
         generateHtmlPayload(out, provider.getName(), cardUrl, request.getRequestURL().toString());
     }
@@ -74,7 +90,7 @@ public class CardScraperFilter extends OncePerRequestFilter {
     private void serveMockScraperResponse(HttpServletRequest request, HttpServletResponse response, String mockName) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        generateHtmlPayload(out, mockName, "https://taraas.com/default-gold-card.png", request.getRequestURL().toString());
+        generateHtmlPayload(out, mockName, "https://qa.taraas.com/logo_icon/android-chrome-512x512.png", request.getRequestURL().toString());
     }
 
     private void generateHtmlPayload(PrintWriter out, String name, String cardUrl, String requestUrl) {
@@ -83,7 +99,7 @@ public class CardScraperFilter extends OncePerRequestFilter {
         out.println("<head>");
         out.println("  <meta charset='UTF-8'>");
         out.println("  <title>" + name + " | Local Pro on Taraas</title>");
-        out.println("  <meta property='og:title' content='" + name + " - Service Professional' />");
+        out.println("  <meta property='og:title' content='🌟 Verified Expert: " + name + "' />");
         out.println("  <meta property='og:description' content='Bringing top-quality work straight to your doorstep. Check out my official portfolio gallery and verified reviews on Taraas!' />");
         out.println("  <meta property='og:image' content='" + cardUrl + "' />");
         out.println("  <meta property='og:image:type' content='image/png' />");

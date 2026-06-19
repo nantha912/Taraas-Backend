@@ -57,7 +57,7 @@ public class ProviderController {
             @RequestParam(required = false) Double lon,
             @RequestParam(defaultValue = "NEARBY") String mode) {
 
-        logger.info("Marketplace Search Triggered -> Mode: {}, Service: {}, City: {}, Lat: {}, Lon: {}", mode, service, city);
+        //logger.info("Marketplace Search Triggered -> Mode: {}, Service: {}, City: {}, Lat: {}, Lon: {}", mode, service, city);
         return providerService.searchWithRanking(service, lat, lon, city, mode);
     }
 
@@ -106,7 +106,7 @@ public class ProviderController {
 
             // 3. Save the updated provider record
             Provider updated = repository.save(provider);
-            logger.info("Profile photo updated for provider: {}", id);
+            //logger.info("Profile photo updated for provider: {}", id);
             return ResponseEntity.ok(updated);
         } catch (IOException e) {
             logger.error("Photo upload failed for provider {}: ", id, e);
@@ -146,7 +146,7 @@ public class ProviderController {
             portfolioPhotos.add(photoUrl);
 
             Provider updated = repository.save(provider);
-            logger.info("Portfolio photo added to provider: {}", id);
+            //logger.info("Portfolio photo added to provider: {}", id);
             return ResponseEntity.ok(updated);
         } catch (IOException e) {
             logger.error("Portfolio upload failed: ", e);
@@ -187,7 +187,7 @@ public class ProviderController {
             portfolioPhotos.remove(url);
 
             Provider updated = repository.save(provider);
-            logger.info("Portfolio photo deleted for provider: {}", id);
+            //logger.info("Portfolio photo deleted for provider: {}", id);
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             logger.error("Failed to delete portfolio photo: ", e);
@@ -200,7 +200,7 @@ public class ProviderController {
         if (id == null || id.isBlank()) {
             return ResponseEntity.badRequest().body("Provider ID is required");
         }
-        logger.info("Deleting Provider ID: {}", id);
+        //logger.info("Deleting Provider ID: {}", id);
         Optional<Provider> providerOpt = repository.findById(id);
         if (providerOpt.isPresent()) {
             repository.delete(providerOpt.get());

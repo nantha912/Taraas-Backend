@@ -67,7 +67,7 @@ public class SubscriptionOnboardingController {
             
             OnboardingTracker savedTracker = onboardingTrackerRepository.save(tracker);
             
-            logger.info("Temporary onboarding cache generated with token ID: {}", savedTracker.getId());
+            //logger.info("Temporary onboarding cache generated with token ID: {}", savedTracker.getId());
             return ResponseEntity.ok(Map.of("trackerId", savedTracker.getId()));
         } catch (Exception e) {
             logger.error("Failed executing state preservation cache allocation trace:", e);
@@ -219,8 +219,8 @@ public class SubscriptionOnboardingController {
             tracker.setStatus("COMPLETED");
             onboardingTrackerRepository.save(tracker);
 
-            logger.info("Premium Onboarding complete! Account dynamically launched for Provider: {} (ID: {})", 
-                    activeProvider.getName(), activeProvider.getId());
+            //logger.info("Premium Onboarding complete! Account dynamically launched for Provider: {} (ID: {})", 
+            //        activeProvider.getName(), activeProvider.getId());
             
             // Return details back to React so it can finish profile redirect tasks smoothly
             return ResponseEntity.ok(activeProvider);

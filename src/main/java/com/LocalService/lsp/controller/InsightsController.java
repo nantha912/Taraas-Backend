@@ -47,7 +47,7 @@ public class InsightsController {
             customerRepo.findByEmail(userEmail).ifPresent(c -> {
                 providerRepo.findByCustomerId(c.getId()).ifPresent(p -> {
                     if (p.getId().equals(providerId)) {
-                        logger.info("Self-view ignored for provider: {}", providerId);
+                        //logger.info("Self-view ignored for provider: {}", providerId);
                     }
                 });
             });
@@ -111,7 +111,7 @@ public class InsightsController {
         );
 
         if (isDuplicate) {
-            logger.info("Duplicate lead ignored for provider: {} (Method: {})", providerId, method);
+            //logger.info("Duplicate lead ignored for provider: {} (Method: {})", providerId, method);
             return ResponseEntity.ok().build();
         }
 
@@ -120,7 +120,7 @@ public class InsightsController {
         }
 
         leadRepo.save(lead);
-        logger.info("New unique lead recorded for provider: {} via {}", providerId, method);
+        //logger.info("New unique lead recorded for provider: {} via {}", providerId, method);
         return ResponseEntity.ok().build();
     }
 
@@ -166,7 +166,7 @@ public class InsightsController {
         LocalDateTime start = LocalDateTime.of(year, month, 1, 0, 0);
         LocalDateTime end = start.plusMonths(1);
 
-        logger.info("Fetching insights for {} between {} and {}", providerId, start, end);
+        //logger.info("Fetching insights for {} between {} and {}", providerId, start, end);
 
         // 1. Unique Profile Views
         long views = viewRepo.findAllByProviderIdAndTimestampBetween(providerId, start, end)

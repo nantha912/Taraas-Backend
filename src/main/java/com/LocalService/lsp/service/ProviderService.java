@@ -28,7 +28,7 @@ public class ProviderService {
     private MongoTemplate mongoTemplate;
 
     public List<ProviderSearchResultDTO> searchWithRanking(String service, Double lat, Double lon, String city, String mode) {
-        logger.info("Marketplace Search (High-Scale Engine) -> Mode: {}, Service: {}, City: {}", mode, service, city);
+        //logger.info("Marketplace Search (High-Scale Engine) -> Mode: {}, Service: {}, City: {}", mode, service, city);
 
         List<AggregationOperation> operations = new ArrayList<>();
         boolean isRemoteMode = "REMOTE".equalsIgnoreCase(mode);
