@@ -46,6 +46,7 @@ public class ProviderController {
     @Autowired
     private S3Service s3Service;
 
+
     /**
      * SEARCH: Mode-Aware Weighted Ranking
      */
@@ -72,6 +73,90 @@ public class ProviderController {
         return repository.findById(id)
                 .map(provider -> ResponseEntity.ok(provider))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * UPLOAD DIGITAL CARD: Uploads a frontend-generated digital ID card image to S3.
+     */
+    @PostMapping("/{id}/digital-card")
+    public ResponseEntity<?> uploadDigitalCard(
+            @PathVariable String id,
+            @RequestParam("file") MultipartFile file) {
+
+        if (id == null || id.isBlank()) {
+            return ResponseEntity.badRequest().body("Provider ID is required");
+        }
+
+        Optional<Provider> providerOpt = repository.findById(id);
+        if (providerOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Provider provider = providerOpt.get();
+
+        try {
+            // Validate the file is indeed an image
+            FileUploadValidator.validateImageFile(file);
+
+            // 1. Delete old card from S3 if it exists
+            String oldUrl = Optional.ofNullable(provider.getGeneratedCardImageUrl()).orElse("");
+            if (!oldUrl.isEmpty()) {
+                s3Service.deleteFile(oldUrl);
+            }
+
+            // 2. Upload the new card to S3 under 'provider-digital-card' folder
+            String cardUrl = s3Service.uploadFile(file, id, "provider-digital-card");
+            provider.setGeneratedCardImageUrl(cardUrl);
+
+            // 3. Save the updated provider record
+            Provider updated = repository.save(provider);
+            return ResponseEntity.ok(Map.of("cardUrl", updated.getGeneratedCardImageUrl()));
+        } catch (Exception e) {
+            logger.error("Digital card upload failed for provider {}: ", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Card upload failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * PROXY IMAGE: Proxies external S3 images to avoid CORS block on canvas screenshot capturing.
+     */
+    @GetMapping("/proxy-image")
+    public ResponseEntity<byte[]> proxyImage(@RequestParam("url") String url) {
+        if (url == null || url.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            // Encode spaces to %20 to avoid malformed HTTP request line (which triggers HTTP 505 / version mismatch on S3)
+            String safeUrl = url.replace(" ", "%20");
+            java.net.URL imageUrl = new java.net.URL(safeUrl);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) imageUrl.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                byte[] imageBytes;
+                try (java.io.InputStream in = connection.getInputStream()) {
+                    imageBytes = in.readAllBytes();
+                }
+                String contentType = connection.getContentType();
+                if (contentType == null) {
+                    contentType = "image/jpeg";
+                }
+                
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.setContentType(org.springframework.http.MediaType.parseMediaType(contentType));
+                headers.setCacheControl("max-age=86400");
+                
+                return new ResponseEntity<>(imageBytes, headers, HttpStatus.OK);
+            }
+            return ResponseEntity.status(responseCode).build();
+        } catch (Exception e) {
+            logger.error("Failed to proxy image: {}", url, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
