@@ -11,8 +11,9 @@ public class SystemSettings {
     private Double baseAmount;
     private Double discountedAmount;
     private String offerName;
-    private String currency = "INR";
+    private String currency = "INR";    
     private boolean active = true;
+    private Double promoterCommissionRate = 0.20;
 
     // Getters and Setters
     public String getId() { return id; }
@@ -27,4 +28,8 @@ public class SystemSettings {
     public void setCurrency(String currency) { this.currency = currency; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public Double getPromoterCommissionRate() { return promoterCommissionRate; }
+    public void setPromoterCommissionRate(Double promoterCommissionRate) { this.promoterCommissionRate = promoterCommissionRate; }
+    
 }
