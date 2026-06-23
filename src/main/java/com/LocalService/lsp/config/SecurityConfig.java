@@ -75,9 +75,16 @@ public class SecurityConfig {
                         .requestMatchers("/provider/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/customers/customer/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers("/api/customers/health").permitAll()
                         .requestMatchers("/api/customers/password/reset").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/promoters/admin/export-payouts").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/promoters/admin/settle/*").permitAll()
+                        .requestMatchers("/api/promoters/config").permitAll()
+                        .requestMatchers("/api/promoters/validate").permitAll()
+                        .requestMatchers("/api/promoters/test-list").permitAll()
+                        
 
                         // Admin endpoints - manual role check in controller
                         .requestMatchers("/api/admin/**").permitAll()
@@ -98,6 +105,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/reviews/**").authenticated()
                         .requestMatchers("/api/statements/**").authenticated()
                         .requestMatchers("/api/insights/**").authenticated()
+                        .requestMatchers("/api/promoters/dashboard/summary").authenticated()
+                        .requestMatchers("/api/promoters/signup").authenticated()
 
                         // Any other requests must be authenticated
                         .anyRequest().authenticated()

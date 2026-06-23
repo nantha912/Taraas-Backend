@@ -2,8 +2,12 @@ package com.LocalService.lsp.controller;
 
 import com.LocalService.lsp.model.OnboardingTracker;
 import com.LocalService.lsp.model.SystemSettings;
+import com.LocalService.lsp.model.Promoter;
+import com.LocalService.lsp.model.ReferralLedger;
 import com.LocalService.lsp.repository.OnboardingTrackerRepository;
 import com.LocalService.lsp.repository.SystemSettingsRepository;
+import com.LocalService.lsp.repository.PromoterRepository;
+import com.LocalService.lsp.repository.ReferralLedgerRepository;
 import com.LocalService.lsp.service.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +34,12 @@ public class SubscriptionOnboardingController {
 
     @Autowired
     private PaymentService paymentService;
+
+    @Autowired
+    private PromoterRepository promoterRepository;
+
+    @Autowired
+    private ReferralLedgerRepository referralLedgerRepository;
 
     /**
      * ENDPOINT A: Get Active Pricing Configuration
@@ -92,21 +102,19 @@ public class SubscriptionOnboardingController {
         }
 
         try {
-            // Pull the authentic active discount price directly out of system setting collections
-            SystemSettings config = systemSettingsRepository.findById("subscription_config")
-                    .orElseGet(() -> {
-                        SystemSettings s = new SystemSettings();
-                        s.setDiscountedAmount(1999.0);
-                        return s;
-                    });
+            OnboardingTracker tracker = trackerOpt.get();
+            Map<String, Object> formMap = tracker.getProviderFormData();
+            String referralCode = null;
+            if (formMap != null && formMap.containsKey("referralCode") && formMap.get("referralCode") != null) {
+                referralCode = formMap.get("referralCode").toString().trim();
+            }
 
-            Double secureAmount = config.getDiscountedAmount();
+            Double secureAmount = configAmountLookup(referralCode);
             
             // Execute order wrapper construction using your existing PaymentService logic hooks
             String razorpayOrderId = paymentService.createRazorpayOrder(secureAmount, "sub_track_" + trackerId);
 
             // Sync the tracking collection to know which Razorpay transaction goes with this form entry
-            OnboardingTracker tracker = trackerOpt.get();
             tracker.setRazorpayOrderId(razorpayOrderId);
             onboardingTrackerRepository.save(tracker);
 
@@ -205,7 +213,14 @@ public class SubscriptionOnboardingController {
             java.time.LocalDateTime paymentTime = java.time.LocalDateTime.now();
             provider.setRole("PROVIDER");
             provider.setSubscriptionStatus("ACTIVE");
-            provider.setSubscriptionPaidAmount(configAmountLookup());
+
+            String referralCode = null;
+            if (payload != null && payload.containsKey("referralCode") && payload.get("referralCode") != null && !payload.get("referralCode").isBlank()) {
+                referralCode = payload.get("referralCode").trim();
+            } else if (formMap != null && formMap.containsKey("referralCode") && formMap.get("referralCode") != null) {
+                referralCode = formMap.get("referralCode").toString().trim();
+            }
+            provider.setSubscriptionPaidAmount(configAmountLookup(referralCode));
             provider.setLastPaymentDate(paymentTime);
             
             // --- PRECISE YEARLY RENEWAL TIMESTAMP ---
@@ -214,6 +229,44 @@ public class SubscriptionOnboardingController {
 
             // 5. Commit the fully verified entity to MongoDB production collections
             com.LocalService.lsp.model.Provider activeProvider = providerRepository.save(provider);
+
+            // --- REFERRAL LEDGER PROCESSING ENGINE ---
+            try {
+
+                if (referralCode != null && !referralCode.isEmpty()) {
+                    Optional<Promoter> promoterOpt = promoterRepository.findByReferralCodeIgnoreCase(referralCode);
+                    if (promoterOpt.isPresent()) {
+                        Promoter promoter = promoterOpt.get();
+                        
+                        // Pull dynamic commission rate configuration
+                        SystemSettings config = systemSettingsRepository.findById("subscription_config").orElse(null);
+                        double promoterCommissionRate = (config != null && config.getPromoterCommissionRate() != null) 
+                                ? config.getPromoterCommissionRate() 
+                                : 0.20; // 20% fallback rate
+
+                        double paidAmount = activeProvider.getSubscriptionPaidAmount();
+                                
+                        double commissionEarned = paidAmount * promoterCommissionRate;
+
+                        ReferralLedger ledger = new ReferralLedger();
+                        ledger.setPromoterId(promoter.getId());
+                        ledger.setReferralCode(promoter.getReferralCode()); // Store canonical code from promoter
+                        ledger.setProviderId(activeProvider.getId());
+                        ledger.setProviderNameMasked(maskProviderName(activeProvider.getName()));
+                        ledger.setOnboardingFeePaid(paidAmount);
+                        ledger.setCommissionEarned(commissionEarned);
+                        ledger.setStatus("EARNED");
+                        ledger.setProcessedAt(java.time.LocalDateTime.now());
+
+                        referralLedgerRepository.save(ledger);
+                        logger.info("Successfully logged promoter commission for code: {}. Commission: ₹{}", promoter.getReferralCode(), commissionEarned);
+                    } else {
+                        logger.warn("Referral code validation warning: Promoter not found for code: {}", referralCode);
+                    }
+                }
+            } catch (Exception referralEx) {
+                logger.error("Fail-safe promoter referral ledger processing intercepted warning:", referralEx);
+            }
             
             // 6. Mark the onboarding tracker as finalized to clear the staging loop
             tracker.setStatus("COMPLETED");
@@ -235,10 +288,38 @@ public class SubscriptionOnboardingController {
     /**
      * Lightweight secure utility helper to query configuration amounts internally for telemetry stamping
      */
-    private Double configAmountLookup() {
-        return systemSettingsRepository.findById("subscription_config")
-                .map(SystemSettings::getDiscountedAmount)
-                .orElse(1999.0);
+    private Double configAmountLookup(String referralCode) {
+        SystemSettings config = systemSettingsRepository.findById("subscription_config").orElse(null);
+        if (config == null) {
+            return (referralCode != null && !referralCode.trim().isEmpty() && 
+                    promoterRepository.findByReferralCodeIgnoreCase(referralCode.trim()).isPresent()) 
+                    ? 1999.0 : 4999.0;
+        }
+
+        boolean hasValidReferral = false;
+        if (referralCode != null && !referralCode.trim().isEmpty()) {
+            hasValidReferral = promoterRepository.findByReferralCodeIgnoreCase(referralCode.trim()).isPresent();
+        }
+
+        if (hasValidReferral) {
+            return config.getDiscountedAmount() != null ? config.getDiscountedAmount() : 1999.0;
+        } else {
+            return config.getBaseAmount() != null ? config.getBaseAmount() : 4999.0;
+        }
+    }
+
+    /**
+     * Mask the provider's actual name for security (e.g., "Nant****" or "P-****")
+     */
+    private String maskProviderName(String name) {
+        if (name == null || name.isBlank()) {
+            return "P-****";
+        }
+        name = name.trim();
+        if (name.length() <= 4) {
+            return name.substring(0, 1) + "****";
+        }
+        return name.substring(0, 4) + "****";
     }
 
 }
