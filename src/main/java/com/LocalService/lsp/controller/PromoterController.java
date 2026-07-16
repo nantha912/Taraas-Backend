@@ -104,8 +104,44 @@ public class PromoterController {
         response.put("conversionsPaidCount", conversions);
         response.put("totalEarnings", totalEarned);
         response.put("historyLedger", logs);
+        response.put("payoutDetails", promoter.getPayoutDetails());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Private Authenticated: Update promoter payout details (UPI ID)
+     */
+    @PutMapping("/payout-details")
+    public ResponseEntity<?> updatePayoutDetails(@RequestBody Promoter.PayoutDetails payoutDetails) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Promoter promoter = promoterRepository.findByEmail(auth.getName()).orElse(null);
+        if (promoter == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Promoter workspace record not found.");
+        }
+
+        if (payoutDetails == null || payoutDetails.getUpiId() == null || payoutDetails.getUpiId().isBlank()) {
+            return ResponseEntity.badRequest().body("UPI ID is required.");
+        }
+
+        String upiId = payoutDetails.getUpiId().trim();
+        Promoter.PayoutDetails existingDetails = promoter.getPayoutDetails();
+        if (existingDetails == null) {
+            existingDetails = new Promoter.PayoutDetails();
+        }
+        existingDetails.setUpiId(upiId);
+        if (existingDetails.getBankAccount() == null) {
+            existingDetails.setBankAccount("PENDING_SETUP");
+        }
+
+        promoter.setPayoutDetails(existingDetails);
+        promoterRepository.save(promoter);
+
+        return ResponseEntity.ok(Map.of("message", "Payout details updated successfully.", "payoutDetails", existingDetails));
     }
     @GetMapping("/admin/export-payouts")
     public ResponseEntity<?> exportUnpaidPayouts(@RequestHeader(value = "X-Admin-Token", required = false) String token) {
