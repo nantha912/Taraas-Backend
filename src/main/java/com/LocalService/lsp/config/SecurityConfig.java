@@ -53,8 +53,8 @@ public class SecurityConfig {
                 // 3. Configure session management to be stateless
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // 4. Add security headers for HTTPS/SSL (basic configuration)
-                .headers(headers -> headers.frameOptions(frame -> frame.deny()))
+                // 4. Modify frame options to support standard Google Identity popup overlays securely
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
 
                 // 5. Add JWT and rate limiting filters
                 .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
@@ -67,6 +67,7 @@ public class SecurityConfig {
                         // Public endpoints - no authentication required
                         .requestMatchers("/api/auth/otp/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/google").permitAll() // 🟢 Securely allowed publicly for incoming redirects
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/verify-otp").permitAll()
                         .requestMatchers("/api/customers/register").permitAll()
@@ -84,7 +85,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/promoters/config").permitAll()
                         .requestMatchers("/api/promoters/validate").permitAll()
                         .requestMatchers("/api/promoters/test-list").permitAll()
-                        
 
                         // Admin endpoints - manual role check in controller
                         .requestMatchers("/api/admin/**").permitAll()

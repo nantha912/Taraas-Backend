@@ -1,6 +1,7 @@
 package com.LocalService.lsp.controller;
 
 import com.LocalService.lsp.dto.AuthResponse;
+import com.LocalService.lsp.dto.GoogleLoginRequest;
 import com.LocalService.lsp.model.Customer;
 import com.LocalService.lsp.model.LoginRequest;
 import com.LocalService.lsp.model.Offer;
@@ -8,13 +9,22 @@ import com.LocalService.lsp.model.Transaction;
 import com.LocalService.lsp.repository.CustomerRepository;
 import com.LocalService.lsp.repository.TransactionRepository;
 import com.LocalService.lsp.security.JwtTokenProvider;
+import com.LocalService.lsp.service.GoogleAuthService;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +33,8 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
     private JwtTokenProvider tokenProvider;
@@ -156,4 +168,129 @@ public class AuthController {
                 .mapToDouble(t -> t.getAmount() != null ? t.getAmount() : 0.0)
                 .sum();
     }
+    
+    @Autowired
+    private GoogleAuthService googleAuthService;
+
+    @Value("${app.frontend.redirect-url:http://localhost:5173}")
+    private String frontendRedirectUrl;
+
+    @PostMapping(value = "/google", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+            public ResponseEntity<?> loginWithGoogleRedirect(
+                    @RequestParam("credential") String credential,
+                    @RequestParam(value = "redirect_uri", required = false) String redirectUri,
+                    @CookieValue(value = "redirect_uri", required = false) String redirectUriCookie
+            ) {
+                String destination = redirectUri;
+                if (destination == null || destination.isBlank()) {
+                    destination = redirectUriCookie;
+                }
+                if (destination == null || destination.isBlank()) {
+                    destination = frontendRedirectUrl;
+                }
+
+                logger.info("Google redirect POST received. redirect_uri=[{}], credential-present=[{}]", redirectUri, credential != null && !credential.isBlank());
+
+                if (credential == null || credential.isBlank()) {
+                    logger.warn("Missing credential in Google redirect POST. Redirecting to destination with status missing_token: {}", destination);
+                    return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                        .location(URI.create(destination + "?loginStatus=missing_token"))
+                        .build();
+                }
+
+                try {
+                    Map<String, Object> authResponse = googleAuthService.authenticateGoogleUser(credential);
+
+                    String redirectUrl = UriComponentsBuilder.fromUriString(destination)
+                        .queryParam("token", authResponse.get("token"))
+                        .queryParam("refreshToken", authResponse.get("refreshToken"))
+                        .queryParam("email", authResponse.get("email"))
+                        .queryParam("name", authResponse.get("name"))
+                        .queryParam("id", authResponse.get("id"))
+                        .queryParam("role", authResponse.getOrDefault("role", "CUSTOMER"))
+                        .queryParam("profilePhotoUrl", authResponse.getOrDefault("profilePhotoUrl", ""))
+                        .encode()                                   // ← added: percent-encode every value
+                        .build()
+                        .toUriString();
+
+                    logger.info("Google credential validated. Redirecting browser back to app: {}", redirectUrl);
+
+                    return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                        .header(HttpHeaders.LOCATION, redirectUrl)
+                        .build();
+
+                } catch (Exception e) {
+                    logger.error("Google authentication failed: {}", e.getMessage(), e);
+                    String failureRedirect = UriComponentsBuilder.fromUriString(destination)   // ← was raw string concat
+                        .queryParam("loginStatus", "failed")
+                        .queryParam("reason", e.getMessage() != null ? e.getMessage() : "unknown_error")
+                        .encode()
+                        .build()
+                        .toUriString();
+                    return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                        .location(URI.create(failureRedirect))
+                        .build();
+                }
+            }
+
+    /**
+     * Fallback GET handler so if Google or a browser lands on the endpoint via GET
+     * we gracefully redirect back to the frontend instead of showing an API page.
+     * This won't complete authentication (no credential was posted), but avoids
+     * leaving the user stuck on the API URL.
+     */
+        @GetMapping("/google")
+            public ResponseEntity<?> loginWithGoogleGet(
+                @RequestParam(value = "credential", required = false) String credential,
+                @RequestParam(value = "id_token", required = false) String idToken,
+                @RequestParam(value = "redirect_uri", required = false) String redirectUri,
+                @CookieValue(value = "redirect_uri", required = false) String redirectUriCookie
+            ) {
+                String destination = redirectUri;
+                if (destination == null || destination.isBlank()) {
+                    destination = redirectUriCookie;
+                }
+                if (destination == null || destination.isBlank()) {
+                    destination = frontendRedirectUrl;
+                }
+
+                String tokenCandidate = credential != null && !credential.isBlank() ? credential : idToken;
+                if (tokenCandidate != null && !tokenCandidate.isBlank()) {
+                    try {
+                    Map<String, Object> authResponse = googleAuthService.authenticateGoogleUser(tokenCandidate);
+                    String redirectUrl = UriComponentsBuilder.fromUriString(destination)
+                        .queryParam("token", authResponse.get("token"))
+                        .queryParam("refreshToken", authResponse.get("refreshToken"))
+                        .queryParam("email", authResponse.get("email"))
+                        .queryParam("name", authResponse.get("name"))
+                        .queryParam("id", authResponse.get("id"))
+                        .queryParam("role", authResponse.getOrDefault("role", "CUSTOMER"))
+                        .queryParam("profilePhotoUrl", authResponse.getOrDefault("profilePhotoUrl", ""))
+                        .encode()
+                        .build()
+                        .toUriString();
+
+                    logger.info("Google credential (GET) validated. Redirecting browser back to app: {}", redirectUrl);
+                    return ResponseEntity.status(HttpStatus.FOUND)
+                        .header(HttpHeaders.LOCATION, redirectUrl)
+                        .build();
+                    } catch (Exception e) {
+                    logger.error("Google authentication failed (GET): {}", e.getMessage(), e);
+                    String failureRedirect = UriComponentsBuilder.fromUriString(destination)
+                        .queryParam("loginStatus", "failed")
+                        .queryParam("reason", e.getMessage() != null ? e.getMessage() : "unknown_error")
+                        .encode()
+                        .build()
+                        .toUriString();
+                    return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(URI.create(failureRedirect))
+                        .build();
+                    }
+                }
+
+                logger.info("Google GET landed on /google without credential. Redirecting browser to frontend: {}", destination);
+                return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(destination + "?loginStatus=method_not_supported"))
+                    .build();
+            }
 }
