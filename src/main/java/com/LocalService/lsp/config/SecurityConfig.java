@@ -85,6 +85,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/promoters/config").permitAll()
                         .requestMatchers("/api/promoters/validate").permitAll()
                         .requestMatchers("/api/promoters/test-list").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/polls/feed").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/polls/reels").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/polls/{id}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/polls/{id}/comments").permitAll()
 
                         // Admin endpoints - manual role check in controller
                         .requestMatchers("/api/admin/**").permitAll()
@@ -92,6 +96,7 @@ public class SecurityConfig {
 
                         // Protected endpoints - any authenticated user
                         .requestMatchers(HttpMethod.POST, "/api/offers/**").authenticated()
+                        .requestMatchers("/api/polls/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/offers/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/offers/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/customers/*/profile-photo").authenticated()
